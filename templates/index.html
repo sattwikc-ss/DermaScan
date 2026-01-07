@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>🩺 DERMASCAN</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon" />
+</head>
+<body>
+    <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+        <span id="theme-icon">🌙</span>
+    </button>
+
+    <nav class="topbar">
+        <div class="brand" onclick="window.location='/'">🩺 DERMASCAN</div>
+        <div class="spacer"></div>
+        <a class="toplink" href="/history">History</a>
+        {% if analysis_id %}
+        <button class="topbtn" onclick="copyLink()" title="Copy shareable link">Share</button>
+        {% endif %}
+    </nav>
+
+    <div class="container">
+        <header>
+            <h1>AI-Assisted Skin Check</h1>
+            <p class="subtitle">Upload an image to identify potential skin conditions</p>
+        </header>
+
+        <div class="card">
+            <h2>Upload Your Image</h2>
+            <form action="/" method="post" enctype="multipart/form-data" id="upload-form">
+                <div class="upload-area" id="drop-area" role="button" tabindex="0" aria-label="Upload image">
+                    <div class="upload-icon">📷</div>
+                    <p>Drag & drop an image here or click to browse</p>
+                    <input type="file" name="file" id="file-input" class="file-input" accept="image/*" required />
+                    <p class="file-name" id="file-name">No file selected</p>
+                </div>
+                <button type="submit" class="button" id="submit-btn">
+                    <span>🔍 Analyze Image</span>
+                </button>
+            </form>
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Analyzing image...</p>
+            </div>
+        </div>
+
+        {% if image_path %}
+        <div class="card">
+            <h2>Analysis Results</h2>
+            <div class="result-container">
+                <div class="image-preview">
+                    <img src="{{ image_path }}" alt="Uploaded Image" onclick="openLightbox('{{ image_path }}')" style="cursor: zoom-in;" />
+                </div>
+                <div class="prediction-details">
+                    <h3>Diagnosis</h3>
+                    <div class="prediction-label">{{ predicted_class }}</div>
+
+                    <h4>Confidence Level</h4>
+                    <div class="confidence-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ confidence|round(0) }}">
+                        <div class="confidence-fill" style="width: {{ confidence }}%">{{ confidence|round(2) }}%</div>
+                    </div>
+
+                    {% if disease_info %}
+                    <div class="disease-info-container">
+                        <div class="tabs" role="tablist">
+                            <div class="tab active" data-tab="about" role="tab" tabindex="0">About</div>
+                            <div class="tab" data-tab="symptoms" role="tab" tabindex="0">Symptoms</div>
+                            <div class="tab" data-tab="treatments" role="tab" tabindex="0">Treatments</div>
+                            <div class="tab" data-tab="prevention" role="tab" tabindex="0">Prevention</div>
+                        </div>
+
+                        <div class="tab-content active" id="about-tab"><div class="disease-info"><h4>About {{ predicted_class }}</h4><p>{{ disease_info.description }}</p></div></div>
+                        <div class="tab-content" id="symptoms-tab"><div class="disease-info"><h4>Common Symptoms</h4><p>{{ disease_info.symptoms }}</p></div></div>
+                        <div class="tab-content" id="treatments-tab"><div class="disease-info"><h4>Treatment Options</h4><p>{{ disease_info.treatments }}</p></div></div>
+                        <div class="tab-content" id="prevention-tab"><div class="disease-info"><h4>Prevention Measures</h4><p>{{ disease_info.prevention }}</p></div></div>
+                    </div>
+                    {% endif %}
+
+                    <div class="actions-bar">
+                        <button class="button" onclick="exportResults('{{ analysis_id }}')">📥 Export Results</button>
+                        <button class="button secondary-button" onclick="addNotes('{{ analysis_id }}')">📝 Add Notes</button>
+                        <button class="button secondary-button" onclick="copyId('{{ analysis_id }}')">🔗 Copy ID</button>
+                    </div>
+
+                    <p class="warning-note"><strong>Note:</strong> This is an AI-assisted analysis and should not replace professional medical advice. Please consult with a dermatologist for proper diagnosis.</p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if history %}
+        <div class="card history-section">
+            <h2>Recent Analysis History</h2>
+            <div class="history-container">
+                {% for item in history %}
+                <div class="history-item" onclick="window.location.href='/?analysis_id={{ item.id }}'">
+                    <img src="{{ item.image_path }}" alt="History Image" class="history-image" />
+                    <div class="history-details">
+                        <div class="history-date">{{ item.timestamp.split('T')[0] }}</div>
+                        <div class="history-diagnosis">{{ item.disease_class }}</div>
+                        <div class="history-confidence">{{ item.confidence|round(2) }}%</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <button class="button secondary-button clear-history" onclick="confirmClearHistory()">🗑️ Clear History</button>
+            <button class="button secondary-button" onclick="window.location.href='/history'">📋 View All History</button>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Export Modal -->
+    <div class="modal" id="export-modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeModal()">&times;</span>
+            <h2>Export Results</h2>
+            <p>Choose your preferred format:</p>
+            <div style="margin-top:20px;display:flex;flex-wrap:wrap;gap:8px;">
+                <button class="button" onclick="downloadPDF()">PDF Document</button>
+                <button class="button" onclick="downloadCSV()">CSV Row</button>
+                <button class="button" onclick="downloadJSON()">JSON Data</button>
+                <button class="button secondary-button" onclick="window.location.href='/api/export/bulk.zip'">Bulk ZIP</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notes Modal -->
+    <div class="modal" id="notes-modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeModal()">&times;</span>
+            <h2>Add Notes</h2>
+            <textarea id="notes-text" rows="6" style="width: 100%; margin: 15px 0; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color);"></textarea>
+            <button class="button" onclick="saveNotes()">Save Notes</button>
+        </div>
+    </div>
+
+    <!-- Lightbox -->
+    <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+        <img id="lightbox-img" alt="Full view" />
+    </div>
+
+    <!-- Toasts -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        let currentAnalysisId = "{{ analysis_id if analysis_id else '' }}";
+
+        function toast(msg){
+            const t=document.getElementById('toast');
+            t.textContent=msg; t.classList.add('show');
+            setTimeout(()=>t.classList.remove('show'),2200);
+        }
+
+        function toggleTheme(){
+            const body=document.body; const icon=document.getElementById('theme-icon');
+            if (body.getAttribute('data-theme')==='dark'){ body.removeAttribute('data-theme'); icon.textContent='🌙'; localStorage.setItem('theme','light'); }
+            else { body.setAttribute('data-theme','dark'); icon.textContent='☀️'; localStorage.setItem('theme','dark'); }
+        }
+
+        document.addEventListener('DOMContentLoaded', function(){
+            const saved=localStorage.getItem('theme');
+            if(saved==='dark' || (saved===null && window.matchMedia('(prefers-color-scheme: dark)').matches)){
+                document.body.setAttribute('data-theme','dark');
+                document.getElementById('theme-icon').textContent='☀️';
+            }
+
+            const fileInput=document.getElementById('file-input');
+            const fileName=document.getElementById('file-name');
+            const dropArea=document.getElementById('drop-area');
+            const uploadForm=document.getElementById('upload-form');
+            const submitBtn=document.getElementById('submit-btn');
+            const loading=document.getElementById('loading');
+
+            if(fileInput){
+                fileInput.addEventListener('change', function(){
+                    if(this.files && this.files[0]){
+                        fileName.textContent=this.files[0].name;
+                        const reader=new FileReader();
+                        reader.onload=function(e){
+                            const preview=document.createElement('img');
+                            preview.src=e.target.result; preview.style.maxHeight='150px'; preview.style.margin='10px auto';
+                            const existing=dropArea.querySelector('img'); if(existing){ existing.remove(); }
+                            dropArea.appendChild(preview);
+                        }
+                        reader.readAsDataURL(this.files[0]);
+                    }
+                });
+            }
+
+            if(dropArea){
+                ['dragenter','dragover','dragleave','drop'].forEach(ev=>dropArea.addEventListener(ev, e=>{e.preventDefault();e.stopPropagation();}));
+                ['dragenter','dragover'].forEach(ev=>dropArea.addEventListener(ev, ()=>{dropArea.style.borderColor='var(--primary-color)';dropArea.style.backgroundColor='rgba(76,175,80,0.1)';}));
+                ['dragleave','drop'].forEach(ev=>dropArea.addEventListener(ev, ()=>{dropArea.style.borderColor='var(--border-color)';dropArea.style.backgroundColor='transparent';}));
+                dropArea.addEventListener('drop', e=>{const dt=e.dataTransfer; fileInput.files=dt.files; fileInput.dispatchEvent(new Event('change'));});
+                dropArea.addEventListener('keydown', e=>{ if(e.key==='Enter' || e.key===' '){ fileInput.click(); }});
+            }
+
+            if(uploadForm){ uploadForm.addEventListener('submit', function(){ submitBtn.style.display='none'; loading.style.display='block'; }); }
+
+            // Tabs
+            document.querySelectorAll('.tab').forEach(tab=>{
+                tab.addEventListener('click', ()=>activateTab(tab));
+                tab.addEventListener('keydown', (e)=>{ if(e.key==='Enter' || e.key===' '){ activateTab(tab);} });
+            });
+            function activateTab(tab){
+                document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+                tab.classList.add('active');
+                document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+                const id=tab.getAttribute('data-tab');
+                document.getElementById(id+'-tab').classList.add('active');
+            }
+        });
+
+        // Export helpers
+        function exportResults(id){ currentAnalysisId=id; document.getElementById('export-modal').style.display='flex'; }
+        function addNotes(id){ currentAnalysisId=id; document.getElementById('notes-modal').style.display='flex'; fetch(`/api/export/${id}`).then(r=>r.json()).then(d=>{ if(d.analysis && d.analysis.notes){ document.getElementById('notes-text').value = d.analysis.notes; }}); }
+        function saveNotes(){ const notes=document.getElementById('notes-text').value; fetch(`/api/notes/${currentAnalysisId}`,{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({notes})}).then(r=>r.json()).then(d=>{ if(d.success){ closeModal(); toast('Notes saved'); }}); }
+        function closeModal(){ document.getElementById('export-modal').style.display='none'; document.getElementById('notes-modal').style.display='none'; }
+        function downloadPDF(){ window.location.href = `/api/export/${currentAnalysisId}/pdf`; }
+        function downloadJSON(){ window.location.href = `/api/export/${currentAnalysisId}`; }
+        function downloadCSV(){ window.location.href = `/api/export/${currentAnalysisId}/csv`; }
+
+        // Lightbox
+        function openLightbox(src){ const lb=document.getElementById('lightbox'); const img=document.getElementById('lightbox-img'); img.src=src; lb.classList.add('show'); }
+        function closeLightbox(){ document.getElementById('lightbox').classList.remove('show'); }
+        window.openLightbox=openLightbox; window.closeLightbox=closeLightbox;
+
+        // History clearing
+        function confirmClearHistory(){ if(confirm('Are you sure you want to clear all history? This action cannot be undone.')){ clearHistory(); } }
+        function clearHistory(){ fetch('/api/history/clear',{method:'POST'}).then(r=>r.json()).then(d=>{ if(d.success){ location.reload(); }}); }
+        window.confirmClearHistory=confirmClearHistory;
+
+        function copyId(id){ navigator.clipboard.writeText(id).then(()=>toast('Analysis ID copied')); }
+        function copyLink(){ navigator.clipboard.writeText(window.location.href).then(()=>toast('Link copied')); }
+    </script>
+</body>
+</html>

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Analysis History - Skin Disease Classifier</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon" />
+</head>
+<body>
+    <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span id="theme-icon">🌙</span></button>
+
+    <div class="container">
+        <header>
+            <h1>Analysis History</h1>
+            <p class="subtitle">View and manage your past skin analysis results</p>
+        </header>
+
+        <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+                <h2>All Analysis Records</h2>
+                <div style="display:flex;gap:8px;">
+                    <button class="button secondary-button" onclick="window.location.href='/'">← Back</button>
+                    <button class="button" onclick="window.location.href='/api/export/bulk.zip'">⬇️ Bulk ZIP</button>
+                </div>
+            </div>
+
+            {% if history %}
+            <div class="history-container" style="margin-top: 30px;">
+                {% for item in history %}
+                <div class="history-item" id="history-{{ item.id }}">
+                    <div style="position: relative;">
+                        <img src="{{ item.image_path }}" alt="History Image" class="history-image" onclick="openLightbox('{{ item.image_path }}')" />
+                        <button onclick="deleteItem('{{ item.id }}')" class="chip-close" title="Delete">×</button>
+                    </div>
+                    <div class="history-details">
+                        <div class="history-date">{{ item.timestamp.split('T')[0] }}</div>
+                        <div class="history-diagnosis">{{ item.disease_class }}</div>
+                        <div class="history-confidence">{{ item.confidence|round(2) }}%</div>
+                        <div style="margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap;">
+                            <button onclick="window.location.href='/?analysis_id={{ item.id }}'" class="mini-btn">View</button>
+                            <button onclick="exportResults('{{ item.id }}')" class="mini-btn info">Export</button>
+                            <button onclick="copyId('{{ item.id }}')" class="mini-btn">Copy ID</button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="pagination">
+                {% if page and pages %}
+                <div>Page {{ page }} of {{ pages }}</div>
+                <div class="pager">
+                    {% if page > 1 %}<a href="/history?page={{ page-1 }}&per_page={{ per_page }}">← Prev</a>{% endif %}
+                    {% if page < pages %}<a href="/history?page={{ page+1 }}&per_page={{ per_page }}">Next →</a>{% endif %}
+                </div>
+                {% endif %}
+            </div>
+
+            <div style="margin-top: 30px; text-align: center;">
+                <button class="button danger-button" onclick="confirmClearHistory()">🗑️ Clear All History</button>
+            </div>
+            {% else %}
+            <div style="text-align: center; padding: 50px 0;">
+                <p>No analysis history found. Upload an image to get started.</p>
+                <button class="button" style="margin-top: 20px;" onclick="window.location.href='/'">Upload Image</button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Export Modal -->
+    <div class="modal" id="export-modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeModal()">&times;</span>
+            <h2>Export Results</h2>
+            <p>Choose your preferred format:</p>
+            <div style="margin-top: 20px; display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="button" onclick="downloadPDF()">PDF Document</button>
+                <button class="button" onclick="downloadCSV()">CSV Row</button>
+                <button class="button" onclick="downloadJSON()">JSON Data</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lightbox -->
+    <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+        <img id="lightbox-img" alt="Full view" />
+    </div>
+
+    <script>
+        let currentAnalysisId = "";
+
+        function toggleTheme(){
+            const b=document.body, i=document.getElementById('theme-icon');
+            if(b.getAttribute('data-theme')==='dark'){ b.removeAttribute('data-theme'); i.textContent='🌙'; localStorage.setItem('theme','light'); }
+            else { b.setAttribute('data-theme','dark'); i.textContent='☀️'; localStorage.setItem('theme','dark'); }
+        }
+        document.addEventListener('DOMContentLoaded',()=>{
+            const saved=localStorage.getItem('theme');
+            if(saved==='dark'){ document.body.setAttribute('data-theme','dark'); document.getElementById('theme-icon').textContent='☀️'; }
+        });
+
+        function exportResults(id){ currentAnalysisId=id; document.getElementById('export-modal').style.display='flex'; }
+        function closeModal(){ document.getElementById('export-modal').style.display='none'; }
+        function downloadPDF(){ window.location.href = `/api/export/${currentAnalysisId}/pdf`; }
+        function downloadJSON(){ window.location.href = `/api/export/${currentAnalysisId}`; }
+        function downloadCSV(){ window.location.href = `/api/export/${currentAnalysisId}/csv`; }
+
+        function deleteItem(itemId){
+            if(confirm('Delete this analysis?')){
+                fetch(`/api/history/${itemId}`, { method:'DELETE' })
+                .then(r=>r.json()).then(d=>{ if(d.success){ document.getElementById(`history-${itemId}`).remove(); }});
+            }
+        }
+
+        function confirmClearHistory(){
+            if(confirm('Are you sure you want to clear all history? This action cannot be undone.')){
+                fetch('/api/history/clear', { method:'POST' })
+                .then(r=>r.json()).then(d=>{ if(d.success){ location.reload(); }});
+            }
+        }
+
+        // Lightbox
+        function openLightbox(src){ const lb=document.getElementById('lightbox'); const img=document.getElementById('lightbox-img'); img.src=src; lb.classList.add('show'); }
+        function closeLightbox(){ document.getElementById('lightbox').classList.remove('show'); }
+
+        function copyId(id){ navigator.clipboard.writeText(id); }
+    </script>
+</body>
+</html>
